@@ -1,0 +1,148 @@
+SELECT * FROM `kimia_farma.Final_Transaction`
+
+SELECT * FROM `kimia_farma.Inventory`
+SELECT * FROM `kimia_farma.Product`
+SELECT * FROM `kimia_farma.Kantor_Cabang`
+
+
+#rating_cabang : penilaian konsumen terhadap cabang Kimia Farma#
+SELECT
+    kota,
+    provinsi,
+    AVG(rating) AS rata_rata_rating,
+    MIN(rating) AS rating_terendah,
+    MAX(rating) AS rating_tertinggi,
+    COUNT(*) AS jumlah_cabang
+FROM
+    `kimia_farma.Kantor_Cabang`
+
+GROUP BY
+    kota,
+    provinsi
+ORDER BY
+    rata_rata_rating DESC;
+
+
+#Menampilkan hasil analisis dari siapa sajakah customer yang melakukan transaksi pada product dengan harga pembelian masing-masing yang disertakan dengan discount yg mereka dapat
+SELECT
+    ft.customer_name,
+    ft.product_id,
+    p.product_name,
+    ft.price,
+    ft.discount_percentage
+FROM
+    `kimia_farma.Final_Transaction` AS ft
+INNER JOIN
+    `kimia_farma.Product` AS p
+ON
+    ft.product_id = p.product_id;
+
+#
+SELECT
+    price,
+    rating,
+    CASE
+        WHEN price <= 50000 THEN 0.10 * price  -- Laba 10%
+        WHEN price > 50000 AND price <= 100000 THEN 0.15 * price  -- Laba 15%
+        WHEN price > 100000 AND price <= 300000 THEN 0.20 * price  -- Laba 20%
+        WHEN price > 300000 AND price <= 500000 THEN 0.25 * price  -- Laba 25%
+        ELSE 0.30 * price  -- Laba 30%
+    END AS persentase_gross_laba,  -- Menghitung persentase laba berdasarkan harga
+    price AS nett_sales,  -- Harga setelah diskon sama dengan harga awal (karena tidak ada informasi diskon)
+    CASE
+        WHEN price <= 50000 THEN 0.10 * price  -- Laba 10%
+        WHEN price > 50000 AND price <= 100000 THEN 0.15 * price  -- Laba 15%
+        WHEN price > 100000 AND price <= 300000 THEN 0.20 * price  -- Laba 20%
+        WHEN price > 300000 AND price <= 500000 THEN 0.25 * price  -- Laba 25%
+        ELSE 0.30 * price  -- Laba 30%
+
+
+SELECT
+    provinsi,
+    branch_name,
+    COUNT(*) AS total_transaksi
+FROM
+    `kimia_farma.Kantor_Cabang`
+GROUP BY
+    provinsi,
+    branch_name
+ORDER BY
+    total_transaksi DESC
+LIMIT 10;
+
+SELECT
+    EXTRACT(YEAR FROM date) AS tahun,
+    SUM(price) AS total_pendapatan
+  FROM
+    `kimia_farma.Final_Transaction`
+  GROUP BY 1
+  ORDER BY
+    tahun
+
+
+#########
+WITH RankedBranches AS (
+    SELECT
+        provinsi,
+        rating,
+        ROW_NUMBER() OVER (PARTITION BY provinsi ORDER BY rating DESC) as rank_num
+    FROM
+        `kimia_farma.Kantor_Cabang`
+),
+Top5Provinces AS (
+  SELECT DISTINCT provinsi
+  FROM RankedBranches
+  ORDER BY provinsi
+  LIMIT 5
+)
+SELECT 
+    rb.provinsi,
+    rb.rating
+FROM RankedBranches rb
+JOIN Top5Provinces tp ON rb.provinsi = tp.provinsi
+WHERE rank_num = 1
+ORDER BY rb.provinsi;
+
+#######
+WITH 
+  Kantor_Cabang_Clean AS (
+    SELECT
+      provinsi,
+      branch_name
+    FROM
+      `Kantor_Cabang`
+  ),
+  Rakamin_KF_Analytics1_Clean AS (
+    SELECT
+      branch_name,
+      nett_sales
+    FROM
+      `Rakamin_KF_Analytics1`
+  ),
+  CombinedData AS (
+    SELECT
+      kc.provinsi,
+      rka.nett_sales
+    FROM
+      Kantor_Cabang_Clean kc
+    INNER JOIN
+      Rakamin_KF_Analytics1_Clean rka ON kc.branch_name = rka.branch_name
+  ),
+  RankedSales AS (
+    SELECT
+      provinsi,
+      nett_sales,
+      DENSE_RANK() OVER (PARTITION BY provinsi ORDER BY nett_sales DESC) AS rank
+    FROM
+      CombinedData
+  )
+SELECT
+  provinsi,
+  nett_sales
+FROM
+  RankedSales
+WHERE
+  rank <= 10
+ORDER BY
+  provinsi,
+  nett_sales DESC;
